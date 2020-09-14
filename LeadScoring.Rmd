@@ -1,0 +1,249 @@
+---
+title: "LeadScoring"
+author: "Rohan Kataria"
+date: "05/09/2020"
+output: html_document
+---
+
+```{r}
+#Loading Libraries
+library(tidyverse)
+library(datarobot)
+library(cowplot)
+library(gridExtra)
+
+#Loading Dataset
+banks <- read_csv("data/bank.csv")
+banks_full <- read_csv("data/bank-full.csv")
+```
+```{r}
+#Connect to DataRobot
+ConnectToDataRobot(
+  endpoint = 'https://app.datarobot.com/api/v2',
+  token = 'YOUR TOKEN'
+)
+
+#Setting up and Starting projects on Quick Autopilot
+
+StartProject(banks, "LeadScoring_1", target = "y", mode = "quick", workerCount = 8)
+
+StartProject(banks_full, "LeadScoring_2", target = "y", mode = "quick", workerCount = 8)
+
+```
+
+```{r}
+
+#Evaluate Models
+##Project 1
+
+project1 <- GetProject("5f57e3207ad20b02dd8ef979")
+
+##Selecting 80% version model
+models1 <-ListModels(project1, orderBy = '-metric')
+
+###This lists all the models in range 65 to 81
+model1 <- Filter(function(m) m$samplePct >= 65 & m$samplePct < 81, models1)
+
+###Select top model from the models list
+model1 <- GetModel(project1, model1[[1]]$modelId)
+
+model1
+
+###Lift Chart
+lc1 <- GetLiftChart(model1)
+lc1$actual <- lc1$actual / lc1$binWeight
+lc1$predicted <- lc1$predicted / lc1$binWeight
+lc1 <- lc1[order(lc1$predicted), ]
+lc1$binWeight <- NULL
+lc1 <- data.frame(value = c(lc1$actual, lc1$predicted),
+                 variable = c(rep("Actual", length(lc1$actual)),
+                              rep("Predicted", length(lc1$predicted))),
+                 id = rep(seq_along(lc1$actual), 2))
+lift_1 <- ggplot(lc1) + geom_line(aes(x = id, y = value, color = variable)) +
+  theme_classic()
+
+###Cross Validation Score
+cv1 <- model1$metrics$AUC$crossValidation
+
+###ROC
+roc1 <- GetRocCurve(model1)
+ValidationRocCurve1 <- GetRocCurve(model1)
+ValidationRocPoints1 <- ValidationRocCurve1[["rocPoints"]]
+ROC_1 <- ggplot(ValidationRocPoints1, aes(x = falsePositiveRate, y = truePositiveRate)) + geom_line() +
+    annotate("rect", xmin = 0.01, xmax = 0.50, ymin = 0.40, ymax = 1.1,
+           alpha = .1,fill = "blue") +
+    annotate("text", x = 0.75, y = 0.4, parse = TRUE, size = 4,
+           label = paste("AUC: ", cv1)) +
+  theme_classic()
+
+###Feature Effect
+feature_impact1 <- GetFeatureImpact(model1)
+feature_data1 <- transform(feature_impact1,
+                          featureName = reorder(featureName, 
+                                                order(impactNormalized)))
+
+
+feature_plot1 <- ggplot(feature_data1, aes(x=featureName, y=impactNormalized)) + 
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic()
+
+
+
+##Project 2
+project2 <- GetProject("5f58efac642c4e0048a4dc40")
+
+##Selecting 80% version model
+models2 <-ListModels(project2, orderBy = '-metric')
+
+###This lists all the models in range 65 to 81
+model2 <- Filter(function(m) m$samplePct >= 65 & m$samplePct < 81, models2)
+
+###Select top model from the models list
+model2 <- GetModel(project2, model2[[1]]$modelId)
+
+model2
+
+###Lift Chart
+lc2 <- GetLiftChart(model2)
+
+lc2$actual <- lc2$actual / lc2$binWeight
+lc2$predicted <- lc2$predicted / lc2$binWeight
+lc2 <- lc2[order(lc2$predicted), ]
+lc2$binWeight <- NULL
+lc2 <- data.frame(value = c(lc2$actual, lc2$predicted),
+                 variable = c(rep("Actual", length(lc2$actual)),
+                              rep("Predicted", length(lc2$predicted))),
+                 id = rep(seq_along(lc2$actual), 2))
+lift_2 <- ggplot(lc2) + geom_line(aes(x = id, y = value, color = variable)) +
+  theme_classic()
+
+
+###Cross Validation Score
+cv2 <- model2$metrics$AUC$crossValidation
+
+###ROC
+roc2 <- GetRocCurve(model2)
+ValidationRocCurve2 <- GetRocCurve(model2)
+ValidationRocPoints2 <- ValidationRocCurve2[["rocPoints"]]
+ROC_2 <- ggplot(ValidationRocPoints2, aes(x = falsePositiveRate, y = truePositiveRate)) + geom_line() +
+  annotate("rect", xmin = 0.01, xmax = 0.50, ymin = 0.40, ymax = 1.1,
+           alpha = .1,fill = "blue") +
+      annotate("text", x = 0.75, y = 0.4, parse = TRUE, size = 4,
+           label = paste("AUC: ", cv2)) +
+  theme_classic()
+
+###Feature Effect
+feature_impact2 <- GetFeatureImpact(model2)
+feature_data2 <- transform(feature_impact2,
+                          featureName = reorder(featureName, 
+                                                order(impactNormalized)))
+
+
+feature_plot2 <- ggplot(feature_data2, aes(x=featureName, y=impactNormalized)) + 
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic()
+
+
+```
+
+
+```{r}
+###Prediction Explanation
+library(tidyverse)
+library(gt)
+library(data.table)
+
+Lead_score1 <- read_csv("data/LeadScoring_2_Light_Gradient_Boosted_Trees_Classifier_with_Early_(75)_80.0_Informative_Features.csv")
+Lead_score2 <- read_csv("data/LeadScoring_1_eXtreme_Gradient_Boosted_Trees_Classifier_(74)_80.0_Informative_Features.csv")
+
+
+Lead_score1 %>%
+  arrange(desc(`Cross-Validation Prediction`)) %>%
+  head(10) %>%
+  summarise(average = mean(`Cross-Validation Prediction`))
+
+Lead_score2 %>%
+  arrange(desc(`Cross-Validation Prediction`)) %>%
+  head(10) %>%
+  summarise(average = mean(`Cross-Validation Prediction`))
+
+#Model with smaller amount of data is less confident about top 10 prediction of model vs model with more data
+
+explanation_1 <- read_csv("data/LeadScoring_1_eXtreme_Gradient_Boosted_Trees_Classifier_(74)_80.0_Informative_Features_PE_3_lt_0.004_gt_0.336.csv")
+
+explanation_2 <- read_csv("data/LeadScoring_2_Light_Gradient_Boosted_Trees_Classifier_with_Early_(75)_80.0_Informative_Features_PE_3_lt_0.002_gt_0.426.csv")
+
+
+explanation_2 %>%
+  arrange(desc(Prediction)) %>%
+  pivot_wider("Explanation 1 Feature", names_from = "Explanation 1 Strength", values_from ="Explanation 1 Value")
+
+explanation_1 %>%
+  arrange(desc(Prediction)) %>%
+  pivot_wider("Explanation 1 Feature", names_from = "Explanation 1 Strength", values_from ="Explanation 1 Value")
+
+```
+```{r}
+library(patchwork)
+library(cowplot)
+library(RGraphics)
+
+lift_row <- plot_grid(
+lift_1 + theme(legend.position = "none"),
+lift_2 + theme(legend.position = "none"),
+align = 'vh',
+hjust = -1,
+nrow = 1
+) 
+
+lift_legend <- get_legend(
+  # create some space to the left of the legend
+  lift_1 + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+lift_chart <- plot_grid(lift_row, lift_legend, rel_widths = c(3, .4))
+
+
+roc_row <- plot_grid(
+ROC_1 + theme(legend.position = "none"),
+ROC_2 + theme(legend.position = "none"),
+align = 'vh',
+hjust = -1,
+nrow = 1
+)
+
+feature_row <- plot_grid(
+feature_plot1 + theme(legend.position = "none"),
+feature_plot2 + theme(legend.position = "none"),
+align = 'vh',
+hjust = -1,
+nrow = 1
+)
+
+#Combine Together with Patchwork
+plot <- lift_chart /roc_row /feature_row
+
+final <- plot + plot_annotation(
+  title = 'Model Evaluation',
+  subtitle = 'Quick Comparison of Lift Chart, ROC Curve, and Feature Importance for Two different Projects',
+  caption = 'See more plots by me on Instagram @byrohankataria',
+  theme = theme(plot.title = element_text(size = 18),
+                plot.caption = element_text(face = "italic"))
+)
+
+
+ggdraw() +
+  draw_plot(final) +
+  draw_image(
+    "media/DataRobot.png", x = 1, y = 1, hjust = 1, vjust = 1, halign = 1, valign = 1,
+    width = 0.15
+  )
+
+ggsave("plots/leadscore.png", last_plot(), width = 8, height = 8, units = "in")
+
+
+
+```
+
