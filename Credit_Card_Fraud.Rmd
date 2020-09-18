@@ -1,0 +1,241 @@
+---
+title: "Credit Card Fraud"
+author: "Rohan Kataria"
+date: "15/09/2020"
+output: html_document
+---
+
+```{r}
+
+#Here we will use a strategy called Frequency-Severity modeling to classify fraudulent credit card transactions.
+
+#Loading Libraries
+library(tidyverse)
+library(datarobot)
+library(cowplot)
+library(gridExtra)
+library(patchwork)
+library(RGraphics)
+
+#Loading Dataset
+credit <- read.csv("data/credit_card_fraud.csv")
+
+```
+
+```{r}
+#What is Total amount Fraud by payment network and payment type?
+
+plot1 <- credit %>%
+  filter(amtFraud > 1) %>%
+  group_by(payment_network, payment_type, amtFraud) %>%
+  summarise() %>% 
+  ggplot(aes(x = reorder(payment_network, -amtFraud), y = amtFraud, fill=payment_type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Amount Fraud & Payment Network",
+       subtitle = "What is Total amount fraud by payment network and payment type?",
+       caption = "See more plots by me on Instagram @byrohankataria",
+       x = "Payment Network",
+       y = "Amount Fraud") +
+    theme_minimal() +
+  theme(plot.title = element_text(size = 18),
+        plot.caption = element_text(color = "#4875B4", face = 'italic'))
+
+
+plot1
+```
+
+```{r}
+#Connect to DataRobot
+ConnectToDataRobot(
+  endpoint = 'https://app.datarobot.com/api/v2',
+  token = datarobot
+)
+
+#Setting up and Starting projects on Quick Autopilot
+
+StartProject(credit, "Credit_Card_Fraud", target = "amtFraud", mode = "quick", workerCount = 8)
+```
+```{r}
+#The goal is to estimate how much each transaction will cost with regard to fraud. This is a regression problem.
+
+#Working with Models
+project <- GetProject("5f60da9cc7ae240ea66631c3")
+
+##Selecting 80% version model
+models <-ListModels(project, orderBy = '-metric')
+model <- Filter(function(m) m$samplePct >= 65 & m$samplePct < 81, models)
+model <- GetModel(project, model[[1]]$modelId)
+
+model
+
+###Get Blue Print
+blueprintId <- model$blueprintId
+blueprintChart <- GetBlueprintChart(model$projectId, blueprintId)
+bp <- BlueprintChartToGraphviz(blueprintChart)
+
+
+#Importantly, the Dual Lift Chart is a little different than the Lift Chart.  In the Dual Lift Chart the X-axis is sorted by the difference in the predictions of both models. So the greater the space between the blue and yellow lines, the higher they differ in predictions. 
+
+###Create a blended model
+modelIds <- c("5f60dd8731d9e85d9d6a851f","5f60f0e24bda4256c43115bc")
+RequestBlender(project, modelIds, "AVG")
+
+
+```
+```{r}
+#Model Insights
+library(GGally)
+library(network)
+library(sna)
+library(httr)
+library(jsonlite)
+library(rjson)
+library(tidyverse)
+library(patchwork)
+library(RColorBrewer)
+library(ggtext)
+
+#Models
+avg <- GetModel(project, models[[3]]$modelId)
+
+
+#Getting Feature Effect
+feature_effect <- function(project_id, model_id) {
+  #Getting feature Effect
+  ## Get the Partial Dependence Response Obect
+routeString <- datarobot:::UrlJoin("projects", project_id, "models", model_id, "featureEffects")
+response <- datarobot:::DataRobotGET(routeString)
+## Convert Response to DataFrame 
+as.tibble.featureEffects = function(rawReturn) {
+  featureEffects = tibble(FeatureName = rawReturn$featureEffects$featureName,
+                          FeatureImpact = rawReturn$featureEffects$featureImpactScore,
+                          FeatureType = rawReturn$featureEffects$featureType,
+                          FeatureEffects = rawReturn$featureEffects$partialDependence$data) %>%
+    arrange(desc(FeatureImpact))
+}
+
+partial_dependence <- as.tibble.featureEffects(response)
+partial_dependence_df <- unnest(partial_dependence, cols = "FeatureEffects")
+return(partial_dependence_df)
+
+}
+pd<- feature_effect("5f60da9cc7ae240ea66631c3", avg$modelId)
+
+#Plotting Feature Effect
+partial <- pd %>%
+  mutate(label = as.numeric(label)) %>%
+  arrange(label)  %>%
+    ggplot(aes(x=label, y=dependence, group=1), colours = "blue") +
+      geom_line(color="#FF5600",) +
+      labs(title = "Partial Dependence",
+        x="Label",
+       y="Probability Of Fraud") + 
+        theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.title.x = element_textbox_simple(
+      width = NULL,
+      padding = margin(4, 4, 4, 4),
+      margin = margin(4, 0, 0, 0),
+      linetype = 1,
+      r = grid::unit(8, "pt"),
+      fill = "azure1"
+    ),
+    axis.title.y = element_textbox_simple(
+      hjust = 0.5,
+      orientation = "left-rotated",
+      minwidth = unit(1, "in"),
+      maxwidth = unit(2, "in"),
+      padding = margin(4, 4, 2, 4),
+      margin = margin(0, 0, 2, 0),
+      fill = "lightsteelblue1"
+    )) +
+  facet_wrap(~FeatureName, labeller = label_wrap_gen(width = 25), ncol = 3,
+             scales = "free")
+
+###Lift Chart
+lc1 <- GetLiftChart(avg)
+lc1$actual <- lc1$actual / lc1$binWeight
+lc1$predicted <- lc1$predicted / lc1$binWeight
+lc1 <- lc1[order(lc1$predicted), ]
+lc1$binWeight <- NULL
+lc1 <- data.frame(value = c(lc1$actual, lc1$predicted),
+                 variable = c(rep("Actual", length(lc1$actual)),
+                              rep("Predicted", length(lc1$predicted))),
+                 id = rep(seq_along(lc1$actual), 2))
+lift_1 <- ggplot(lc1) + 
+  geom_line(aes(x = id, y = value, color = variable)) +
+  labs(title = "Lift Chart") +
+  theme_classic()
+
+###Feature Impact
+feature_impact1 <- GetFeatureImpact(avg)
+feature_data1 <- transform(feature_impact1,
+                          featureName = reorder(featureName, 
+                                                order(impactNormalized)))
+
+
+feature_plot1 <- ggplot(feature_data1, aes(x=featureName, y=impactNormalized)) + 
+  geom_bar(stat = "identity") +
+  labs(title = "Feature Impact") +
+  coord_flip() +
+  theme_classic()
+
+
+#Prediction Explanations
+explanation_1 <- read.csv("data/Credit_Card_Fraud_AVG_Blender_(64+52)_(66)_80_Informative_Features_PE_3_lt_0.457_gt_38.379.csv")
+explanation <- explanation_1 %>%
+  mutate(Explanation.1.Strength = if_else(Explanation.1.Strength == "", "unknown", Explanation.1.Strength))%>% 
+  arrange(desc(Prediction)) %>% 
+  pivot_wider(Explanation.1.Feature, names_from = Explanation.1.Strength, values_from = Explanation.1.Value, values_fn = list(Explanation.1.Value = ~sum(!is.na(.), na.rm = TRUE)))
+
+TSpecial <- ttheme_minimal(
+  core=list(bg_params = list(fill = blues9[1:3], col=NA),
+            fg_params=list(fontface=3)),
+  colhead=list(fg_params=list(col="olivedrab", fontface=4L)),
+  rowhead=list(fg_params=list(col="orangered4", fontface=3L)))
+
+grob <- gridExtra::tableGrob(explanation, theme = TSpecial)
+prediction_explanation <- ggplot() + 
+  labs(title = "Prediciton Explanations") +
+  annotation_custom(grob) +
+  theme(panel.background = element_blank())
+
+```
+
+
+```{r}
+#Joining all Plots together
+
+plot <- (lift_1 / feature_plot1 / prediction_explanation) | partial
+
+final_plot <- plot +
+  plot_annotation(
+    title = "<b>AVG Blender Model Evaluation</b><br>
+    <span style = 'font-size:15pt'>In the following plot we will evaluate the *Lift Chart, Feature Impact, Partial Dependence and Prediction Explanations,* of the <span style = 'color:red;'>AVG Blender Model</span><br> created for the Credit Card Fraud Dataset. <br><span style = 'color:blue;'>*The Model is a blend of  Frequency-Severity Light Gradient Boosted Trees & Light Gradient Boosting on ElasticNet Predictions (Tweedie Loss: 1.5).* </span></span>",
+    caption = 'See more plots by me on Instagram @byrohankataria',
+    theme = theme(plot.title.position = "plot",
+    plot.title = element_textbox_simple(
+      size = 20,
+      lineheight = 1,
+      padding = margin(5.5, 5.5, 5.5, 5.5),
+      margin = margin(0, 0, 5.5, 0),
+      fill = "cornsilk"
+    ),
+    plot.caption = element_text(face = "italic", size = 13)
+    )
+  )
+
+
+join_img <- ggdraw() +
+  draw_plot(final_plot) +
+  draw_image(
+    "media/DataRobot.png", x = 0.99, y = 1, hjust = 1, vjust = 1, halign = 1, valign = 1,
+    width = 0.15
+  )
+
+
+ggsave("plots/Credit_Card_Fraud.png", join_img, width = 15, height = 16, units = "in")
+```
+

@@ -148,43 +148,6 @@ feature_plot2 <- ggplot(feature_data2, aes(x=featureName, y=impactNormalized)) +
 
 ```
 
-
-```{r}
-###Prediction Explanation
-library(tidyverse)
-library(gt)
-library(data.table)
-
-Lead_score1 <- read_csv("data/LeadScoring_2_Light_Gradient_Boosted_Trees_Classifier_with_Early_(75)_80.0_Informative_Features.csv")
-Lead_score2 <- read_csv("data/LeadScoring_1_eXtreme_Gradient_Boosted_Trees_Classifier_(74)_80.0_Informative_Features.csv")
-
-
-Lead_score1 %>%
-  arrange(desc(`Cross-Validation Prediction`)) %>%
-  head(10) %>%
-  summarise(average = mean(`Cross-Validation Prediction`))
-
-Lead_score2 %>%
-  arrange(desc(`Cross-Validation Prediction`)) %>%
-  head(10) %>%
-  summarise(average = mean(`Cross-Validation Prediction`))
-
-#Model with smaller amount of data is less confident about top 10 prediction of model vs model with more data
-
-explanation_1 <- read_csv("data/LeadScoring_1_eXtreme_Gradient_Boosted_Trees_Classifier_(74)_80.0_Informative_Features_PE_3_lt_0.004_gt_0.336.csv")
-
-explanation_2 <- read_csv("data/LeadScoring_2_Light_Gradient_Boosted_Trees_Classifier_with_Early_(75)_80.0_Informative_Features_PE_3_lt_0.002_gt_0.426.csv")
-
-
-explanation_2 %>%
-  arrange(desc(Prediction)) %>%
-  pivot_wider("Explanation 1 Feature", names_from = "Explanation 1 Strength", values_from ="Explanation 1 Value")
-
-explanation_1 %>%
-  arrange(desc(Prediction)) %>%
-  pivot_wider("Explanation 1 Feature", names_from = "Explanation 1 Strength", values_from ="Explanation 1 Value")
-
-```
 ```{r}
 library(patchwork)
 library(cowplot)
