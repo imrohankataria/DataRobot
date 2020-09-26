@@ -25,4 +25,4 @@ Pull requests are welcome.
 ## Acknowledgment
 I would like to express my special thanks of gratitude to my mentor [Rodrigo Bertin](https://www.linkedin.com/in/rodrigo-bertin-brazil/) for helping me understand Business values and Technology throughout and assiting me with the Capston Project,  as well as [Sharon Castillo](https://www.linkedin.com/in/sharon-castillo/) and [Rajiv Shah](https://www.linkedin.com/in/rcshah/) who gave me the golden opportunity and always supported me.
 
-Big Thanks to [Emily Webber](https://www.linkedin.com/in/emily-webber-1802a180/) for continous Technology Support. Couldn't have accomplished this without you. 
+Big Thanks to [Emily Webber](https://www.linkedin.com/in/emily-webber-1802a180/) for continous Technology Support. 
