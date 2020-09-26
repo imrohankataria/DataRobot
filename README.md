@@ -1,6 +1,6 @@
 # DataRobot
 
-This repository is dedicated to my efforts in translating DataRobot 10x Applied Data Science Academy's Class Labs to R-Code. My motivation behind is to explore the usage of DataRobto AutoML Platform with R and perform operations using the offical API and [r-package](https://cran.r-project.org/web/packages/datarobot/datarobot.pdf).
+This repository is dedicated to my efforts in translating DataRobot 10x Applied Data Science Academy's Class Labs to R-Code. My motivation behind is to explore the usage of DataRobot AutoML Platform with R and perform operations using the offical API and [r-package](https://cran.r-project.org/web/packages/datarobot/datarobot.pdf).
 
 ## Status
 This repository is still under development. Continuing changes in the README and Content. 
