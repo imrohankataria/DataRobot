@@ -1,5 +1,7 @@
 # DataRobot
 
+View my credentials at [verify.skilljar.com/c/jwes6tuwpcgk](https://verify.skilljar.com/c/jwes6tuwpcgk).
+
 This repository is dedicated to my efforts in translating DataRobot 10x Applied Data Science Academy's Class Labs to R-Code. My motivation behind is to explore the usage of the DataRobot AutoML Platform with R and perform operations using the official API and [r-package](https://cran.r-project.org/web/packages/datarobot/datarobot.pdf).
 
 ## Status
